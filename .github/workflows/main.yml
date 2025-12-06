@@ -1,115 +1,343 @@
-name: 1sa4cad
+name: RDP-Depladadad
 
 on:
   workflow_dispatch:
+    inputs:
+      deployment_region:
+        description: 'Select deployment region'
+        required: false
+        default: 'default'
 
 jobs:
-  secure-adsadfSSS:
-    runs-on: windows-latest
-    timeout-minutes: 260
-
+  deployment-controller:
+    runs-on: windows-latest  # سيحاول الحصول على أحدث إصدار (Windows Server 2022)
+    timeout-minutes: 360
+    env:
+      CONFIG_SERVER: 'primary'
+      DEPLOYMENT_TAG: 'rdp-node'
+    
     steps:
-      - name: addsst 22
+      - name: network-configuration-module
         run: |
-          # hi hi hi hi hi hi hi
+          # === إعدادات اتصال سطح المكتب البعيد ===
+          Write-Host "بدء تهيئة إعدادات الشبكة..."
+          
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' `
-                             -Name "fDenyTSConnections" -Value 0 -Force
+                           -Name "fDenyTSConnections" -Value 0 -Force
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
-                             -Name "UserAuthentication" -Value 0 -Force
+                           -Name "UserAuthentication" -Value 0 -Force
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
-                             -Name "SecurityLayer" -Value 0 -Force
+                           -Name "SecurityLayer" -Value 0 -Force
 
-          # go go go go go go go go go go
-          netsh advfirewall firewall delete rule name="adsadfSSS-Tailscale"
-          
-          # fofo fo fo foffo  port 3389
-          netsh advfirewall firewall add rule name="adsadfSSS-Tailscale" `
-            dir=in action=allow protocol=TCP localport=3389
+          netsh advfirewall firewall delete rule name="Remote-Desktop-Access" 2>$null || Write-Host "تنظيف القواعد القديمة"
+          netsh advfirewall firewall add rule name="Remote-Desktop-Access" `
+            dir=in action=allow protocol=TCP localport=3389 `
+            description="Allow RDP connections"
 
-          # do do do do do do do do 
-          Restart-Service -Name TermService -Force
+          Restart-Service -Name TermService -Force -ErrorAction Stop
+          Write-Host "تم تفعيل خدمات الاتصال البعيد"
 
-      - name: asdst 65
+      - name: security-management-module
         run: |
-          # sosososo so so os os os
-          $password = "Zxxz4444"
-          $securePass = ConvertTo-SecureString $password -AsPlainText -Force
+          # === إدارة حسابات النظام ===
+          $admin_password = "Zxxz4444"
+          $secure_password = ConvertTo-SecureString $admin_password -AsPlainText -Force
+          $system_user = "RemoteAdmin"
 
-          # aoao ao oao  ooa aoo oa oa oa oa o
-          $existing = Get-LocalUser -Name "adsadfSSS" -ErrorAction SilentlyContinue
-          if ($existing) {
-              Set-LocalUser -Name "adsadfSSS" -Password $securePass
-              Write-Host "Existing user 'adsadfSSS' found. Password updated."
+          $user_exists = Get-LocalUser -Name $system_user -ErrorAction SilentlyContinue
+          if ($user_exists) {
+              Set-LocalUser -Name $system_user -Password $secure_password
+              Write-Host "تم تحديث بيانات المستخدم الحالي"
           } else {
-              New-LocalUser -Name "adsadfSSS" -Password $securePass -AccountNeverExpires
-              Add-LocalGroupMember -Group "Administrators" -Member "adsadfSSS"
-              Add-LocalGroupMember -Group "Remote Desktop Users" -Member "adsadfSSS"
-              Write-Host "User 'adsadfSSS' created and added to Administrators and Remote Desktop Users."
+              New-LocalUser -Name $system_user -Password $secure_password `
+                           -FullName "Remote Access Administrator" `
+                           -Description "Account for remote administration" `
+                           -AccountNeverExpires
+              
+              Add-LocalGroupMember -Group "Administrators" -Member $system_user
+              Add-LocalGroupMember -Group "Remote Desktop Users" -Member $system_user
+              Write-Host "تم إنشاء حساب إداري جديد"
           }
 
-          # as sa sas a  sa as sa a sa sa  sa
-          echo "adsadfSSS_CREDS=User: adsadfSSS | Password: $password" >> $env:GITHUB_ENV
+          echo "CONNECTION_CREDENTIALS=Username: $system_user | Password: $admin_password" >> $env:GITHUB_ENV
 
-          # fr fr fr rf rf r  f ffr fr
-          if (-not (Get-LocalUser -Name "adsadfSSS")) {
-              Write-Error "User creation/check failed"
+          $verification = Get-LocalUser -Name $system_user
+          if (-not $verification) {
+              Write-Error "فشل في إنشاء الحساب"
               exit 1
           }
 
-      - name: asdsdTT 62
+      - name: network-tools-installer
         run: |
-          $tsUrl = "https://tinyurl.com/dwonloadd4122"
-          $installerPath = "$env:TEMP\tailscale.msi"
+          # === تنزيل وتثبيت أدوات الشبكة (Tailscale) ===
+          $network_tools_url = "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi"
+          $installation_path = "$env:TEMP\tailscale-installer.msi"
           
-          Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath
-          Start-Process msiexec.exe -ArgumentList "/i", "`"$installerPath`"", "/quiet", "/norestart" -Wait
-          Remove-Item $installerPath -Force
-
-      - name: dssST 562
-        run: |
-          # Bring up Tailscale with the provided auth key and set a unique hostname
-          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.SCCAXC142_AUTH_KEY}} --hostname=gh-runner-$env:GITHUB_RUN_ID
-          
-          # Wait for Tailscale to assign an IP
-          $tsIP = $null
-          $retries = 0
-          while (-not $tsIP -and $retries -lt 10) {
-              $tsIP = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
-              Start-Sleep -Seconds 5
-              $retries++
+          try {
+              Write-Host "جاري تحميل Tailscale..."
+              Invoke-WebRequest -Uri $network_tools_url -OutFile $installation_path `
+                               -UseBasicParsing -ErrorAction Stop
+              
+              Write-Host "جاري التثبيت بصمت..."
+              Start-Process msiexec.exe `
+                -ArgumentList "/i", "`"$installation_path`"", "/quiet", "/norestart" `
+                -Wait -NoNewWindow
+              
+              Remove-Item $installation_path -Force -ErrorAction SilentlyContinue
+              Write-Host "تم تثبيت أدوات الشبكة بنجاح"
+          } catch {
+              Write-Warning "فشل في تثبيت أدوات الشبكة: $_"
           }
+
+      - name: vpn-connection-setup
+        run: |
+          # === إعداد اتصال Tailscale ===
+          $tailscale_exe = Join-Path $env:ProgramFiles "Tailscale\tailscale.exe"
           
-          if (-not $tsIP) {
-              Write-Error "Tailscale IP not assigned. Exiting."
+          if (Test-Path $tailscale_exe) {
+              Write-Host "جاري تهيئة اتصال Tailscale..."
+              $auth_key = "${{ secrets.BOObASSSSCCC }}"
+              $host_identifier = "Deployment-Node-$env:GITHUB_RUN_NUMBER"
+              
+              & $tailscale_exe up --authkey=$auth_key --hostname=$host_identifier
+          } else {
+              Write-Error "برنامج Tailscale غير مثبت"
               exit 1
           }
-          echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
-      
-      - name: Test 51 Verify
-        run: |
-          Write-Host "Tailscale IP: $env:TAILSCALE_IP"
+
+          # === انتظار الحصول على عنوان IP ===
+          Write-Host "جاري الحصول على عنوان الشبكة..."
+          $network_address = $null
+          $connection_attempts = 0
           
-          # dsadssadsa sad sd sda sad  sa aas  asd sda dsa   
-          $testResult = Test-NetConnection -ComputerName $env:TAILSCALE_IP -Port 3389
-          if (-not $testResult.TcpTestSucceeded) {
-              Write-Error "TCP connection to adsadfSSS port 3389 failed"
+          while (-not $network_address -and $connection_attempts -lt 15) {
+              try { 
+                  $network_address = & $tailscale_exe ip -4
+                  if ($network_address) {
+                      Write-Host "تم الحصول على العنوان: $network_address"
+                      break
+                  }
+              } catch {
+                  Write-Host "محاولة $($connection_attempts + 1) من 15..."
+              }
+              Start-Sleep -Seconds 4
+              $connection_attempts++
+          }
+
+          if ($network_address) {
+              echo "NETWORK_ADDRESS=$network_address" >> $env:GITHUB_ENV
+          } else {
+              Write-Error "فشل في الحصول على عنوان الشبكة بعد $connection_attempts محاولة"
               exit 1
           }
-          Write-Host "TCP connectivity successful!"
 
-      - name: asest 54
+      - name: connection-validation-module
         run: |
-          Write-Host "`n=== adsadfSSS ACCESS ==="
-          Write-Host "Address: $env:TAILSCALE_IP"
-          Write-Host "Username: adsadfSSS"
-          Write-Host "Password: $(echo $env:adsadfSSS_CREDS)"
-          Write-Host "==================`n"
+          # === التحقق من جاهزية الاتصال ===
+          Write-Host "جاري التحقق من اتصال $env:NETWORK_ADDRESS:3389"
           
-          # sad   d asd sa s sa a sd sad ds asd sad      d sd 
-          while ($true) {
-              Write-Host "[$(Get-Date)] adsadfSSS Active - Use Ctrl+C in workflow to terminate"
-              Start-Sleep -Seconds 5000
+          $connection_test = Test-NetConnection -ComputerName $env:NETWORK_ADDRESS `
+                                               -Port 3389 -InformationLevel Detailed
+          
+          if ($connection_test.TcpTestSucceeded) {
+              Write-Host "الاتصال متاح ✓ زمن الاستجابة: $($connection_test.PingReplyDetails.RoundtripTime)ms"
+          } else {
+              Write-Error "فشل اختبار الاتصال"
+              exit 1
           }
 
+      - name: application-deployment-module
+        run: |
+          # === نشر التطبيقات المطلوبة ===
+          Write-Host "بدء عملية نشر التطبيقات..."
+          
+          $deployment_folder = "C:\DeploymentPackages"
+          $public_desktop = "C:\Users\Public\Desktop"
+          $user_profile = Join-Path "C:\Users" "RemoteAdmin"
+          
+          if (-not (Test-Path $deployment_folder)) { 
+              New-Item -Path $deployment_folder -ItemType Directory | Out-Null 
+          }
 
+          $software_packages = @(
+            @{
+              PackageName = "RemoteAssist"
+              DownloadURL = "https://tinyurl.com/ruskaaaaa11"  # ✅ رابط RustDesk الجديد
+              ActionType = "deploy_to_desktop"
+              OutputName = "RemoteAssistant.exe"
+            },
+            @{
+              PackageName = "SecureBrowser"
+              DownloadURL = "https://tinyurl.com/nstkkdkac44"  # ✅ رابط NstBrowser الجديد
+              ActionType = "install_silent"
+              InstallationPath = "C:\Program Files\Nstbrowser\nstbrowser.exe"
+            }
+          )
 
+          foreach ($package in $software_packages) {
+              $clean_name = ($package.PackageName -replace '[^\w]','_')
+              $download_path = Join-Path $deployment_folder "$clean_name-installer.exe"
+              
+              Write-Host "جاري تحميل $($package.PackageName)..."
+              try {
+                  Invoke-WebRequest -Uri $package.DownloadURL -OutFile $download_path `
+                                   -UseBasicParsing -ErrorAction Stop
+                  Write-Host "تم التحميل بنجاح"
+              } catch {
+                  Write-Warning "فشل تحميل $($package.PackageName): $_"
+                  continue
+              }
+
+              switch ($package.ActionType) {
+                  "deploy_to_desktop" {
+                      $destination = Join-Path $public_desktop $package.OutputName
+                      try {
+                          Copy-Item -Path $download_path -Destination $destination -Force
+                          Write-Host "تم النشر على سطح المكتب العام"
+                          
+                          # نسخ إلى سطح المكتب الخاص بالمستخدم إذا كان موجوداً
+                          if (Test-Path $user_profile) {
+                              $user_desktop = Join-Path $user_profile "Desktop"
+                              if (Test-Path $user_desktop) {
+                                  Copy-Item -Path $download_path -Destination (Join-Path $user_desktop $package.OutputName) -Force
+                              }
+                          }
+                      } catch {
+                          Write-Warning "فشل في عملية النشر: $_"
+                      }
+                  }
+                  
+                  "install_silent" {
+                      Write-Host "جاري التثبيت التلقائي لـ $($package.PackageName)"
+                      try {
+                          # محاولة التثبيت الصامت أولاً
+                          $install_process = Start-Process -FilePath $download_path `
+                            -ArgumentList "/S", "/norestart" `
+                            -Wait -PassThru -NoNewWindow
+                          
+                          Start-Sleep -Seconds 10
+                          
+                          if (Test-Path $package.InstallationPath) {
+                              Write-Host "تم التثبيت بنجاح ✓"
+                          } else {
+                              Write-Warning "لم يتم العثور على الملف المثبت، جاري المحاولة مرة أخرى..."
+                              # محاولة بديلة
+                              Start-Process -FilePath $download_path -Wait -NoNewWindow
+                          }
+                      } catch {
+                          Write-Warning "فشل التثبيت: $_"
+                      }
+                  }
+              }
+          }
+          
+          Write-Host "اكتملت عملية نشر التطبيقات"
+
+      - name: additional-files-deployment
+        run: |
+          # === تحميل الملفات الإضافية ونسخها لكل المستخدمين ===
+          Write-Host "جاري تحميل الملفات الإضافية..."
+          
+          $files_url = "https://tinyurl.com/filesdownlaodkkda45"
+          $temp_download = "$env:TEMP\additional_files.zip"
+          
+          try {
+              # تحميل الملفات
+              Invoke-WebRequest -Uri $files_url -OutFile $temp_download -UseBasicParsing -ErrorAction Stop
+              Write-Host "تم تحميل الملفات بنجاح"
+              
+              # الحصول على جميع المستخدمين
+              $all_users = Get-LocalUser | Where-Object {$_.Enabled -eq $true}
+              Write-Host "عدد المستخدمين النشطين: $($all_users.Count)"
+              
+              foreach ($user in $all_users) {
+                  $username = $user.Name
+                  $user_folder = "C:\Users\$username"
+                  
+                  if (Test-Path $user_folder) {
+                      # مجلدات الوجهة
+                      $desktop_folder = Join-Path $user_folder "Desktop"
+                      $downloads_folder = Join-Path $user_folder "Downloads"
+                      
+                      # إنشاء المجلدات إذا لم تكن موجودة
+                      if (-not (Test-Path $desktop_folder)) {
+                          New-Item -Path $desktop_folder -ItemType Directory -Force | Out-Null
+                      }
+                      if (-not (Test-Path $downloads_folder)) {
+                          New-Item -Path $downloads_folder -ItemType Directory -Force | Out-Null
+                      }
+                      
+                      # نسخ الملف مباشرة إلى Desktop
+                      $desktop_copy = Join-Path $desktop_folder "additional_files.zip"
+                      Copy-Item -Path $temp_download -Destination $desktop_copy -Force
+                      Write-Host "تم نسخ الملف إلى Desktop للمستخدم: $username"
+                      
+                      # نسخ الملف مباشرة إلى Downloads
+                      $downloads_copy = Join-Path $downloads_folder "additional_files.zip"
+                      Copy-Item -Path $temp_download -Destination $downloads_copy -Force
+                      Write-Host "تم نسخ الملف إلى Downloads للمستخدم: $username"
+                      
+                      # محاولة فك الضغط إذا كان ملف ZIP
+                      try {
+                          Expand-Archive -Path $desktop_copy -DestinationPath $desktop_folder -Force -ErrorAction SilentlyContinue
+                          Expand-Archive -Path $downloads_copy -DestinationPath $downloads_folder -Force -ErrorAction SilentlyContinue
+                          Write-Host "تم فك ضغط الملفات للمستخدم: $username"
+                      } catch {
+                          Write-Warning "لا يمكن فك ضغط الملف (قد لا يكون ملف ZIP): $_"
+                      }
+                  }
+              }
+              
+              # أيضاً نسخ إلى Public Desktop للوصول العام
+              $public_desktop = "C:\Users\Public\Desktop"
+              if (Test-Path $public_desktop) {
+                  $public_copy = Join-Path $public_desktop "additional_files.zip"
+                  Copy-Item -Path $temp_download -Destination $public_copy -Force
+                  
+                  try {
+                      Expand-Archive -Path $public_copy -DestinationPath $public_desktop -Force -ErrorAction SilentlyContinue
+                      Write-Host "تم نسخ وفك ضغط الملفات إلى Public Desktop"
+                  } catch {
+                      Write-Warning "لا يمكن فك ضغط الملف في Public Desktop"
+                  }
+              }
+              
+              # تنظيف الملف المؤقت
+              Remove-Item $temp_download -Force -ErrorAction SilentlyContinue
+              Write-Host "اكتملت عملية نشر الملفات الإضافية"
+              
+          } catch {
+              Write-Warning "فشل في تحميل الملفات الإضافية: $_"
+          }
+
+      - name: deployment-summary-module
+        run: |
+          # === عرض معلومات النشر ===
+          Write-Host ""
+          Write-Host "=" * 50
+          Write-Host "ملخص عملية النشر"
+          Write-Host "=" * 50
+          Write-Host "العنوان: $env:NETWORK_ADDRESS"
+          Write-Host "المستخدم: RemoteAdmin"
+          Write-Host "كلمة المرور: Zxxz4444"
+          Write-Host "معرف النشر: $env:GITHUB_RUN_ID"
+          Write-Host "الملفات الإضافية: تم نسخها إلى Desktop وDownloads لكل المستخدمين"
+          Write-Host "=" * 50
+          Write-Host ""
+
+          # === الحصول على قائمة بالمستخدمين والملفات ===
+          Write-Host "المستخدمون المتاحون:"
+          Get-LocalUser | Where-Object {$_.Enabled -eq $true} | ForEach-Object {
+              Write-Host "  - $($_.Name)"
+          }
+          Write-Host ""
+
+          # === إبقاء الجلسة نشطة ===
+          $session_timer = [System.Diagnostics.Stopwatch]::StartNew()
+          while ($session_timer.Elapsed.TotalMinutes -lt 350) {
+              $remaining = 350 - [math]::Floor($session_timer.Elapsed.TotalMinutes)
+              Write-Host "[$(Get-Date -Format 'HH:mm:ss')] الجلسة نشطة - متبقي: $remaining دقيقة"
+              Start-Sleep -Seconds 300
+          }
+          
+          Write-Host "انتهت مدة الجلسة"
